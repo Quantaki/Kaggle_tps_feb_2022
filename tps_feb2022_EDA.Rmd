@@ -1,0 +1,65 @@
+---
+title: 'TPS feb 2022 EDA'
+date: '`r Sys.Date()`'
+output:
+  html_document:
+    number_sections: true
+    fig_caption: true
+    toc: true
+    fig_width: 7
+    fig_height: 4.5
+    theme: cosmo
+    highlight: tango
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Import libraries 
+
+```{r, message= FALSE, warning= FALSE}
+library(tidyverse)
+library(data.table)
+library(skimr)
+#library(corrplot)
+library(patchwork)
+library(gt)
+library(scales)
+```
+
+# Import data 
+
+```{r, message= FALSE, warning= FALSE}
+bacteria_train <- fread("train.csv")
+
+bacteria_test <- fread("test.csv")
+```
+
+## overview 
+
+```{r}
+bacteria_train %>% 
+  head(5) %>% 
+  gt()
+```
+
+## Data structure 
+
+```{r}
+bacteria_train %>% 
+  select(- row_id) %>% 
+  sample_frac(0.2) %>% 
+  skim() 
+```
+
+> Lage data set 200000 x 288
+
+> All predicors are double 
+
+> Perfectly cleaned data, no missing value; the target has ten unique value (bacteria species), no anomalies.
+
+
+
+
