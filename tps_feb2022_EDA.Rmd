@@ -27,7 +27,16 @@ Sys.setenv(LANG = "en")
 
 ```
 
+# Context
+
+
+# About this notebook
+
+
+
 # Import libraries and data 
+
+First, importing and preparing the data.
 
 ```{r, message= FALSE, warning= FALSE}
 library(tidyverse)
@@ -56,7 +65,7 @@ bacteria_train %>%
 
 ## Check missing values 
 
-```{r}
+```{r, warning=FALSE, message=FALSE}
 bacteria_tt <- bind_rows(bacteria_train, bacteria_test, .id = "data")
 
 is.na(bacteria_tt[, -c("target", "id", "data")]) %>% sum()
@@ -71,7 +80,7 @@ gc()
 ```
 
 
-```{r}
+```{r, warning=FALSE, message=FALSE}
 # compute stat
 statistics <- bacteria_train[, 
                              - c("row_id", "target")
@@ -126,6 +135,7 @@ summary_stat %>%
              data_row.padding = px(1)
              )
 ```
+
 
 > Large data set 200000 x 288
 > All predicors are double 
@@ -207,12 +217,14 @@ for(i in seq_along(p)) {
   p[[i]] <- featCorToTarget_plot(x_corr, bacteria_species[[i]])
 }
 
-(p[[1]] + p[[2]])
-(p[[3]] + p[[4]]) 
-(p[[5]] + p[[6]]) 
-(p[[7]] + p[[8]])
-(p[[9]] + p[[10]]) 
+p[[1]] + p[[2]]  
+p[[3]] + p[[4]] 
+p[[5]] + p[[6]]
+p[[7]] + p[[8]]
+p[[9]] + p[[10]]
 
 ```
 
+# Feature distribution 
 
+# *work in progress*
