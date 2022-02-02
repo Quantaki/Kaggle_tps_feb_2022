@@ -159,7 +159,7 @@ bacteria_species <- bacteria_train$target %>% unique()
 
 target_encode <- vector("list", length = length(bacteria_species))
 
-for(i in seq_along(targt_encode)) {
+for(i in seq_along(target_encode)) {
   target_encode[[i]] <- 
     ifelse(bacteria_train$target == bacteria_species[[i]], 1, 0)
 }
@@ -184,21 +184,34 @@ x_corr <- x_corr %>%
 
 # visualization 
 
-featCorToTarget_plot <- function(df, feat) {
+featCorToTarget_plot <- function(df, target) {
   
   df %>% 
-    arrange(desc(.data[[feat]]))
+    arrange(desc(.data[[target]])) %>% 
+    filter(row_number() %in% 1:20) %>% 
+    ggplot(aes(reorder(feature, .data[[target]]),
+               .data[[target]],
+               fill = feature)) + 
+    geom_col(show.legend = FALSE) + 
+    theme_minimal() + 
+    labs(x = "",
+         y = "Correlations",
+         title = str_c(target)) + 
+    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
     
 }
 
-x_corr %>% 
-  mutate(correlation = abs(correlation)) %>% 
-  ggplot(aes(reorder(feature, correlation), correlation, fill = feature)) + 
-  geom_col(show.legend = FALSE) + 
-  facet_wrap(~ target, ncol = 2, scales = "free") +
-  theme_minimal()
+p <- vector("list", length(bacteria_species))
 
-featCorToTarget_plot(x_corr, "Campylobacter_jejuni")
+for(i in seq_along(p)) {
+  p[[i]] <- featCorToTarget_plot(x_corr, bacteria_species[[i]])
+}
+
+(p[[1]] + p[[2]])
+(p[[3]] + p[[4]]) 
+(p[[5]] + p[[6]]) 
+(p[[7]] + p[[8]])
+(p[[9]] + p[[10]]) 
 
 ```
 
