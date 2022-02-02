@@ -17,27 +17,34 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-# Import libraries 
+```{r, include = FALSE}
+remotes::install_github("jthomasmock/gtExtras")
+
+```
+
+```{r, include=FALSE}
+Sys.setenv(LANG = "en")
+
+```
+
+# Import libraries and data 
 
 ```{r, message= FALSE, warning= FALSE}
 library(tidyverse)
 library(data.table)
 library(skimr)
-#library(corrplot)
+library(corrplot)
 library(patchwork)
 library(gt)
+library(gtExtras)
 library(scales)
-```
 
-# Import data 
-
-```{r, message= FALSE, warning= FALSE}
+# data 
 bacteria_train <- fread("train.csv")
-
 bacteria_test <- fread("test.csv")
 ```
 
-## overview 
+## Overview 
 
 ```{r}
 bacteria_train %>% 
@@ -45,21 +52,154 @@ bacteria_train %>%
   gt()
 ```
 
-## Data structure 
+# Data structure 
+
+## Check missing values 
 
 ```{r}
-bacteria_train %>% 
-  select(- row_id) %>% 
-  sample_frac(0.2) %>% 
-  skim() 
+bacteria_tt <- bind_rows(bacteria_train, bacteria_test, .id = "data")
+
+is.na(bacteria_tt[, -c("target", "id", "data")]) %>% sum()
+
 ```
 
-> Lage data set 200000 x 288
+> NULL, no missing value for both dataset train and test
 
+```{r, include=FALSE}
+remove(bacteria_tt)
+gc()
+```
+
+
+```{r}
+# compute stat
+statistics <- bacteria_train[, 
+                             - c("row_id", "target")
+                             ][, 
+                               lapply(.SD,
+                                      function(x) list(
+                                        mean(x),
+                                        sd(x),
+                                        min(x),
+                                        median(x),
+                                        max(x))
+                                      ),
+                               .SDcols = names(bacteria_train)[- c(1, 288)]
+                               ] 
+
+# tidy data frame
+summary_stat <- tibble(
+  feature = names(statistics),
+  mean = unlist(statistics[1]),
+  sd = unlist(statistics[2]),
+  min = unlist(statistics[3]),
+  median = unlist(statistics[4]),
+  max = unlist(statistics[5])
+)
+
+summary_stat <- summary_stat %>% 
+  mutate(across(- feature, function(x) x * 1000),
+         cv = sd / mean) %>% 
+  select(feature, mean, sd, cv, min, median, max)
+
+# add grammer to table 
+summary_stat %>% 
+  gt() %>% 
+  gt_plt_bar_pct(column = cv, scaled = F) %>%
+  cols_align("center", contains("scale")) %>%
+  fmt_number(
+    columns = "mean":"max",
+    decimals = 7) %>% 
+  tab_header(title = "Summary statistics of tps_feb22",
+             subtitle = "* Values are scaled by a factor 1000") %>%
+  cols_width(starts_with("feature") ~ px(100),
+             everything() ~ px(80)) %>%
+  data_color(columns = c(2,3,5,6,7),
+             colors = scales::col_numeric("plasma", 
+                                          domain = c(min(summary_stat$min),
+                                                     max(summary_stat$max))),
+             alpha = 0.7) %>% 
+  gt_theme_538() %>% 
+  tab_options(table.font.size = px(11),
+             heading.title.font.size = px(18),
+             column_labels.font.size = px(12),
+             data_row.padding = px(1)
+             )
+```
+
+> Large data set 200000 x 288
 > All predicors are double 
-
 > Perfectly cleaned data, no missing value; the target has ten unique value (bacteria species), no anomalies.
 
 
+# Target exploration 
+
+## Target distribution 
+
+```{r}
+bacteria_train %>% 
+  count(target) %>% 
+  ggplot(aes(reorder(target, n), n, fill = target)) + 
+  geom_col() +
+  coord_flip() + 
+  theme_minimal() + 
+  theme(legend.position = "none") + 
+  labs(y = "n",
+       x = "Bacteria species",
+       title = "target distribution")
+```
+
+> All ten species are equaly distributed ~ 20000 sample for each one. 
+
+## Feature correlation with target
+
+```{r}
+# target encoding with 1 & 0
+bacteria_species <- bacteria_train$target %>% unique()
+
+target_encode <- vector("list", length = length(bacteria_species))
+
+for(i in seq_along(targt_encode)) {
+  target_encode[[i]] <- 
+    ifelse(bacteria_train$target == bacteria_species[[i]], 1, 0)
+}
+
+names(target_encode) <- bacteria_species
+
+x <- cbind(bacteria_train[, -c("row_id", "target")],
+           as.data.table(target_encode))
+
+# correlations 
+x_corr <- cor(x, method = "pearson") %>% 
+  as_tibble()
+
+feature <- x_corr %>% names()
+
+x_corr <- x_corr %>% 
+  mutate(feature = feature) %>% 
+  select(Streptococcus_pyogenes:feature) %>%
+  filter(!(feature %in% bacteria_species)) %>% 
+  mutate(across(where(is.double), abs))
+
+
+# visualization 
+
+featCorToTarget_plot <- function(df, feat) {
+  
+  df %>% 
+    arrange(desc(.data[[feat]]))
+    
+}
+
+x_corr %>% 
+  mutate(correlation = abs(correlation)) %>% 
+  ggplot(aes(reorder(feature, correlation), correlation, fill = feature)) + 
+  geom_col(show.legend = FALSE) + 
+  facet_wrap(~ target, ncol = 2, scales = "free") +
+  theme_minimal()
+
+featCorToTarget_plot(x_corr, "Campylobacter_jejuni")
+
+```
 
 
