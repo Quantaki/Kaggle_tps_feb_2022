@@ -17,6 +17,12 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+```{css, echo=FALSE}
+p {
+  font-size: 17px;
+}
+```
+
 ```{r, include = FALSE}
 remotes::install_github("jthomasmock/gtExtras")
 
@@ -27,22 +33,29 @@ Sys.setenv(LANG = "en")
 
 ```
 
-# Context
+# Short introduction
 
+Welcome to this new and fresh February TPS! this month we will deal with genetics and the good news all features are senseful at least to genetic specialists! In this competition we will try to  classify 10 different bacteria species using data from a genomic analysis technique.
 
 # About this notebook
 
+This is a beginner level EDA, where I emphasis the most importante features of the data. You will encounter in this EDA : 
 
+* Data structure exploration 
+
+* The features importance 
+
+* Highlights the most important relationships 
 
 # Import libraries and data 
 
-First, importing and preparing the data.
+First, importing and preparing the data. The libraries used here are for data wrangling and visualizations. 
 
 ```{r, message= FALSE, warning= FALSE}
 library(tidyverse)
 library(data.table)
-library(skimr)
 library(corrplot)
+library(cowplot)
 library(patchwork)
 library(gt)
 library(gtExtras)
@@ -53,6 +66,8 @@ bacteria_train <- fread("train.csv")
 bacteria_test <- fread("test.csv")
 ```
 
+# Data structure exploration
+
 ## Overview 
 
 ```{r}
@@ -61,9 +76,9 @@ bacteria_train %>%
   gt()
 ```
 
-# Data structure 
+> Nice dataset, first look, first thinking : The names of features are informative, there is a lot that can be done!
 
-## Check missing values 
+## lets check the missing values 
 
 ```{r, warning=FALSE, message=FALSE}
 bacteria_tt <- bind_rows(bacteria_train, bacteria_test, .id = "data")
@@ -79,6 +94,9 @@ remove(bacteria_tt)
 gc()
 ```
 
+## Summary statistics
+
+We propose a rapid overview of some statistics. Note that we scaled the data by a factor x 1000 to reduce numbers of zero after the commas. 
 
 ```{r, warning=FALSE, message=FALSE}
 # compute stat
@@ -118,7 +136,7 @@ summary_stat %>%
   cols_align("center", contains("scale")) %>%
   fmt_number(
     columns = "mean":"max",
-    decimals = 7) %>% 
+    decimals = 5) %>% 
   tab_header(title = "Summary statistics of tps_feb22",
              subtitle = "* Values are scaled by a factor 1000") %>%
   cols_width(starts_with("feature") ~ px(100),
@@ -129,24 +147,26 @@ summary_stat %>%
                                                      max(summary_stat$max))),
              alpha = 0.7) %>% 
   gt_theme_538() %>% 
-  tab_options(table.font.size = px(11),
-             heading.title.font.size = px(18),
-             column_labels.font.size = px(12),
+  tab_options(table.font.size = px(14),
+             heading.title.font.size = px(22),
+             column_labels.font.size = px(16),
              data_row.padding = px(1)
              )
 ```
 
 
-> Large data set 200000 x 288
-> All predicors are double 
-> Perfectly cleaned data, no missing value; the target has ten unique value (bacteria species), no anomalies.
-
+> The range of the values for each feature is very large. So we expect large left skewness. 
+> The good thinks is that we deal with the same measure ("spectrophotometic") of dna for all features... This is really interesting for some features engineering.
 
 # Target exploration 
 
+We start our analysis by the target, ten species of bacteria to identify, not trough a microscopic images! But trough their DNA structure! 
+
 ## Target distribution 
 
-```{r}
+Lets see the sample balance of the target. 
+
+```{r, warning=FALSE, message=FALSE}
 bacteria_train %>% 
   count(target) %>% 
   ggplot(aes(reorder(target, n), n, fill = target)) + 
@@ -159,11 +179,13 @@ bacteria_train %>%
        title = "target distribution")
 ```
 
-> All ten species are equaly distributed ~ 20000 sample for each one. 
+> Great! All ten species are equaly distributed ~ 20000 sample for each one. 
 
-## Feature correlation with target
+## Feature importance 
 
-```{r}
+The aim of this analysis is to identify the top twenty (20) most related features to each bacteria species. For this we use the correlation matrix, the correlations are directly related to the coefficients of a basic linear regression.
+
+```{r, warning=FALSE, message=FALSE}
 # target encoding with 1 & 0
 bacteria_species <- bacteria_train$target %>% unique()
 
@@ -199,7 +221,7 @@ featCorToTarget_plot <- function(df, target) {
   df %>% 
     arrange(desc(.data[[target]])) %>% 
     filter(row_number() %in% 1:20) %>% 
-    ggplot(aes(reorder(feature, .data[[target]]),
+    ggplot(aes(reorder(feature, - .data[[target]]),
                .data[[target]],
                fill = feature)) + 
     geom_col(show.legend = FALSE) + 
@@ -225,6 +247,143 @@ p[[9]] + p[[10]]
 
 ```
 
+> In Order :
+
+> * *Klebsiella_pneumoniae* has the highest correlation scores with features with a top value of 0.557 with A1T1G4C4 which is very high for a binary regression ! 
+
+> * Second, *Campylobacter_jejuni* with a top value 0.420 with A4T6G0C0.
+
+> * third, this table summarize the results :
+
+```{r}
+top_cor <- function(x, feat) {
+  x <- x
+  top <- max(x)
+  feat <- feat[x == top]
+  list(top, feat)
+}
+
+
+tab <- lapply(x_corr, top_cor, feature)
+
+top_cor <- rep(NA, length(tab))
+feat <- rep(NA, length(tab))
+
+for(i in seq_along(tab)) {
+    top_cor[[i]] <- pluck(tab, i, 1)
+    feat[[i]] <- pluck(tab, i, 2)
+}
+
+tidy <- tibble(bacteria_target_species = names(tab),
+               top_correlation = top_cor,
+               feature_correlated_to = feat) %>% 
+  filter(bacteria_target_species != "feature") %>% 
+  arrange(desc(top_correlation)) %>% 
+  mutate(rank = row_number(),
+         top_correlation = as.double(top_correlation)) %>% 
+  select(rank, everything())
+
+
+tidy %>% 
+  gt() %>% 
+  cols_align("center", contains("scale")) %>% 
+  fmt_number(columns = "top_correlation", decimals = 3) %>% 
+  tab_header(title = "Top couple of bacteria and feature correlation") %>% 
+  gt_theme_538()
+  
+```
+
+> Interestingly some feature has repetitive occurance , like :
+
+> * A1T2G3C4 which is the top correlated feature to both Salmonella_enterica and Streptococcus_pneumoniae.
+
+> * A2T2G3C3 to Escherichia_coli and Escherichia_fergusonii.
+
+*feature importance anlysis to be continued*
+
 # Feature distribution 
 
-# *work in progress*
+Lets now see how the feature are individual distributed.
+
+```{r, warning=FALSE}
+# Define decimals 
+
+density_plot <- function(df, x){
+
+p <-   df %>% 
+  ggplot(aes(.data[[x]])) +
+  geom_density(fill = "blue") + 
+  scale_y_continuous(labels = function(x) sprintf("%.1f", x)) +
+  labs(y = "density")
+    
+p + 
+  theme_minimal() +
+  theme(legend.position = "none",
+  legend.title = element_text(size= 5),
+  legend.text = element_text(size= 5),
+  legend.key.height = unit(1, 'mm'),
+  legend.key.width = unit(4, 'mm'),
+  legend.key.size = unit(0.5, "mm"),
+  axis.title.y = element_text(size=8),
+  axis.text.y = element_text(size=8),
+  axis.text.x = element_text(size = 8),
+  axis.title.x = element_text(size = 10))
+
+}
+
+features <- names(bacteria_train)[- c(1, 288)]
+
+
+p <- vector("list", length(features))
+
+sample <- bacteria_train %>% sample_n(10000)
+
+for(i in seq_along(p)) {
+  
+  p[[i]] <- density_plot(sample, features[[i]])
+  
+}
+
+
+plot_grid(plotlist = p[1:20], align = "h", ncol = 4)
+plot_grid(plotlist = p[21:40], align = "h", ncol = 4)
+plot_grid(plotlist = p[41:60], align = "h", ncol = 4)
+plot_grid(plotlist = p[61:80], align = "h", ncol = 4)
+plot_grid(plotlist = p[81:100], align = "h", ncol = 4)
+plot_grid(plotlist = p[101:120], align = "h", ncol = 4)
+plot_grid(plotlist = p[121:140], align = "h", ncol = 4)
+plot_grid(plotlist = p[141:160], align = "h", ncol = 4)
+plot_grid(plotlist = p[161:180], align = "h", ncol = 4)
+plot_grid(plotlist = p[181:200], align = "h", ncol = 4)
+plot_grid(plotlist = p[201:220], align = "h", ncol = 4)
+plot_grid(plotlist = p[221:240], align = "h", ncol = 4)
+plot_grid(plotlist = p[241:260], align = "h", ncol = 4)
+plot_grid(plotlist = p[261:286], align = "h", ncol = 4)
+```
+
+> As expected there distributions has a wide rage. 
+
+> Left skeweness is a common feature of most data. 
+
+# Feature Interactions
+
+Does features has strong relationship with each other? Lets see how they interact. We start by the correlation matrix 
+
+```{r, warning=FALSE}
+sample %>% 
+  select(where(is_double), - row_id) %>% 
+  cor() %>% 
+  corrplot(method = "color", diag = FALSE, tl.pos='n')
+```
+
+> High interactions !!
+
+> The heatmap of correlation matrix shown very interesting patterns! We can easly discern different mosaic of a square shape for both postive and negative correlations, these squares get smaller to the end of the data columns.. 
+
+> We highly suggest to use correlations matrix for some feature engineering, the first exercice is to encode features given the square they belongs to! I'm pretty sure this will have high impact to the AUC !! Get FUN...
+
+
+**If you enjoy exploring this kernel please consider upvote**
+
+*Stay tunned work still in progress*
+
