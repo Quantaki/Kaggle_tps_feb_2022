@@ -55,6 +55,7 @@ First, importing and preparing the data. The libraries used here are for data wr
 library(tidyverse)
 library(data.table)
 library(corrplot)
+library(ggforce)
 library(cowplot)
 library(patchwork)
 library(gt)
@@ -183,7 +184,7 @@ bacteria_train %>%
 
 ## Feature importance 
 
-The aim of this analysis is to identify the top twenty (20) most related features to each bacteria species. For this we use the correlation matrix, the correlations are directly related to the coefficients of a basic linear regression.
+The aim of this analysis is to identify the top twenty (20) most correlated features to each bacteria species. For this we use the correlation matrix, the correlations are directly related to the coefficients of a basic linear regression.
 
 ```{r, warning=FALSE, message=FALSE}
 # target encoding with 1 & 0
@@ -253,7 +254,7 @@ p[[9]] + p[[10]]
 
 > * Second, *Campylobacter_jejuni* with a top value 0.420 with A4T6G0C0.
 
-> * third, this table summarize the results :
+> * This table summarize the results :
 
 ```{r}
 top_cor <- function(x, feat) {
@@ -286,11 +287,10 @@ tidy <- tibble(bacteria_target_species = names(tab),
 
 tidy %>% 
   gt() %>% 
-  cols_align("center", contains("scale")) %>% 
-  fmt_number(columns = "top_correlation", decimals = 3) %>% 
-  tab_header(title = "Top couple of bacteria and feature correlation") %>% 
-  gt_theme_538()
-  
+  tab_header(
+    title = md("**Top couple of bacteria and feature correlation**"),
+    )
+
 ```
 
 > Interestingly some feature has repetitive occurance , like :
@@ -306,7 +306,6 @@ tidy %>%
 Lets now see how the feature are individual distributed.
 
 ```{r, warning=FALSE}
-# Define decimals 
 
 density_plot <- function(df, x){
 
@@ -367,13 +366,21 @@ plot_grid(plotlist = p[261:286], align = "h", ncol = 4)
 
 # Feature Interactions
 
+## Correlation heatmap 
+
 Does features has strong relationship with each other? Lets see how they interact. We start by the correlation matrix 
 
 ```{r, warning=FALSE}
-sample %>% 
+
+# correlaion matrix 
+cor <- bacteria_train %>% 
   select(where(is_double), - row_id) %>% 
-  cor() %>% 
+  cor() 
+
+# Heat map
+cor %>% 
   corrplot(method = "color", diag = FALSE, tl.pos='n')
+
 ```
 
 > High interactions !!
@@ -382,6 +389,51 @@ sample %>%
 
 > We highly suggest to use correlations matrix for some feature engineering, the first exercice is to encode features given the square they belongs to! I'm pretty sure this will have high impact to the AUC !! Get FUN...
 
+## Most interesting relationships 
+
+We try first to identify the top ten strongly correlated features, and then apply a scatter plot function to highlight the nature of relationship.
+
+```{r}
+# Top correlations 
+diag(cor) <- NA
+
+top_cor <- cor %>% 
+  as_tibble() %>% 
+  mutate(feature_1 = dimnames(cor)[[1]]) %>% 
+  pivot_longer(- feature_1, names_to = "feature_2", values_to = "cor") %>% 
+  drop_na() %>% 
+  mutate(cor_abs = abs(cor)) %>% 
+  arrange(- cor_abs)
+
+top_cor %>% 
+  head(10) %>% 
+  gt() %>% 
+  tab_header(
+    title = md("**Top ten couple of feature correlation**"),
+    )
+
+
+```
+
+Lets Visualize the top one correlation 
+
+```{r}
+
+bacteria_train %>% 
+  sample_frac(0.3) %>% 
+  ggplot(aes(A1T2G6C1, A1T2G7C0)) + 
+  geom_point(aes(col = target), size = 2) + 
+  geom_smooth(method = "lm", formula = "y~x", col = "red") + 
+  facet_zoom(x = A1T2G6C1 < 0.001, y = A1T2G7C0 < 0.0005) + 
+  theme(legend.position = "top")
+
+```
+
+> Wow ! becareful outliers ! 
+
+> It's clear now that each species has it's own pattern ! 
+
+> Interractions are very strong ! 
 
 **If you enjoy exploring this kernel please consider upvote**
 
