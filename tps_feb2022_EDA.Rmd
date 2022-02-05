@@ -403,7 +403,9 @@ top_cor <- cor %>%
   pivot_longer(- feature_1, names_to = "feature_2", values_to = "cor") %>% 
   drop_na() %>% 
   mutate(cor_abs = abs(cor)) %>% 
-  arrange(- cor_abs)
+  arrange(- cor_abs) %>% 
+  mutate(rank = row_number()) %>% 
+  select(rank, everything())
 
 top_cor %>% 
   head(10) %>% 
@@ -425,15 +427,17 @@ bacteria_train %>%
   geom_point(aes(col = target), size = 2) + 
   geom_smooth(method = "lm", formula = "y~x", col = "red") + 
   facet_zoom(x = A1T2G6C1 < 0.001, y = A1T2G7C0 < 0.0005) + 
-  theme(legend.position = "top")
+  labs(title = "Top one correlation between A1T2G6C1 ~ A1T2G7C0, highlighted by target ") + 
+  theme(legend.position = "top") 
+
 
 ```
 
-> Wow ! becareful outliers ! 
+> Wow ! becareful outliers before any conclusion! 
 
-> It's clear now that each species has it's own pattern ! 
+> It's clear now that each species has it's own pattern, clusturs are well defined. 
 
-> Interractions are very strong ! 
+> Interractions are very strong ! I highly suggest based tree models.
 
 **If you enjoy exploring this kernel please consider upvote**
 
