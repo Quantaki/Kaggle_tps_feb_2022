@@ -54,13 +54,14 @@ First, importing and preparing the data. The libraries used here are for data wr
 ```{r, message= FALSE, warning= FALSE}
 library(tidyverse)
 library(data.table)
+library(skimr)
 library(corrplot)
 library(ggforce)
 library(cowplot)
 library(patchwork)
 library(gt)
-library(gtExtras)
 library(scales)
+library(viridis)
 
 # data 
 bacteria_train <- fread("train.csv")
@@ -97,66 +98,41 @@ gc()
 
 ## Summary statistics
 
-We propose a rapid overview of some statistics. Note that we scaled the data by a factor x 1000 to reduce numbers of zero after the commas. 
+We propose a rapid overview of some statistics of a sample of 30 randomly selected features. 
 
 ```{r, warning=FALSE, message=FALSE}
-# compute stat
-statistics <- bacteria_train[, 
-                             - c("row_id", "target")
-                             ][, 
-                               lapply(.SD,
-                                      function(x) list(
-                                        mean(x),
-                                        sd(x),
-                                        min(x),
-                                        median(x),
-                                        max(x))
-                                      ),
-                               .SDcols = names(bacteria_train)[- c(1, 288)]
-                               ] 
+skim <- bacteria_train %>% 
+  skim() %>% 
+  as_tibble()
 
-# tidy data frame
-summary_stat <- tibble(
-  feature = names(statistics),
-  mean = unlist(statistics[1]),
-  sd = unlist(statistics[2]),
-  min = unlist(statistics[3]),
-  median = unlist(statistics[4]),
-  max = unlist(statistics[5])
-)
+skim_num <- skim %>% 
+  filter(skim_type == "numeric", skim_variable != "id") %>% 
+  select(skim_variable, numeric.mean:numeric.hist)
 
-summary_stat <- summary_stat %>% 
-  mutate(across(- feature, function(x) x * 1000),
-         cv = sd / mean) %>% 
-  select(feature, mean, sd, cv, min, median, max)
+new_numNames <- skim_num %>% 
+  names() %>% 
+  str_remove_all("numeric.") %>% 
+  str_remove("skim_")
 
-# add grammer to table 
-summary_stat %>% 
-  gt() %>% 
-  gt_plt_bar_pct(column = cv, scaled = F) %>%
-  cols_align("center", contains("scale")) %>%
-  fmt_number(
-    columns = "mean":"max",
-    decimals = 5) %>% 
-  tab_header(title = "Summary statistics of tps_feb22",
-             subtitle = "* Values are scaled by a factor 1000") %>%
-  cols_width(starts_with("feature") ~ px(100),
-             everything() ~ px(80)) %>%
-  data_color(columns = c(2,3,5,6,7),
-             colors = scales::col_numeric("plasma", 
-                                          domain = c(min(summary_stat$min),
-                                                     max(summary_stat$max))),
-             alpha = 0.7) %>% 
-  gt_theme_538() %>% 
-  tab_options(table.font.size = px(14),
-             heading.title.font.size = px(22),
-             column_labels.font.size = px(16),
-             data_row.padding = px(1)
-             )
+names(skim_num) <- new_numNames
+
+set.seed(123)
+
+skim_num %>% 
+  mutate(rank = row_number()) %>% 
+  sample_n(30) %>% 
+  arrange(rank) %>% 
+  select(- rank) %>%
+  gt() %>%
+  gt::tab_header(
+    title = "Summary statistics of 30 features randomly selected"
+  ) %>% 
+  gt::tab_options(data_row.padding = px(1))
 ```
 
 
-> The range of the values for each feature is very large. So we expect large left skewness. 
+> The range of the values for each feature is very large. So we expect large left skewness.
+
 > The good thinks is that we deal with the same measure ("spectrophotometic") of dna for all features... This is really interesting for some features engineering.
 
 # Target exploration 
@@ -190,17 +166,16 @@ The aim of this analysis is to identify the top twenty (20) most correlated feat
 # target encoding with 1 & 0
 bacteria_species <- bacteria_train$target %>% unique()
 
-target_encode <- vector("list", length = length(bacteria_species))
-
-for(i in seq_along(target_encode)) {
-  target_encode[[i]] <- 
-    ifelse(bacteria_train$target == bacteria_species[[i]], 1, 0)
+encod_matching <- function(x) {
+  ifelse(bacteria_train$target == x, 1, 0)
 }
 
-names(target_encode) <- bacteria_species
+targets <- lapply(bacteria_species, encod_matching)
+
+names(targets) <- bacteria_species
 
 x <- cbind(bacteria_train[, -c("row_id", "target")],
-           as.data.table(target_encode))
+           as.data.table(targets))
 
 # correlations 
 x_corr <- cor(x, method = "pearson") %>% 
@@ -216,7 +191,6 @@ x_corr <- x_corr %>%
 
 
 # visualization 
-
 featCorToTarget_plot <- function(df, target) {
   
   df %>% 
@@ -234,11 +208,7 @@ featCorToTarget_plot <- function(df, target) {
     
 }
 
-p <- vector("list", length(bacteria_species))
-
-for(i in seq_along(p)) {
-  p[[i]] <- featCorToTarget_plot(x_corr, bacteria_species[[i]])
-}
+p <- lapply(bacteria_species, featCorToTarget_plot, df = x_corr)
 
 p[[1]] + p[[2]]  
 p[[3]] + p[[4]] 
@@ -257,27 +227,15 @@ p[[9]] + p[[10]]
 > * This table summarize the results :
 
 ```{r}
-top_cor <- function(x, feat) {
-  x <- x
-  top <- max(x)
-  feat <- feat[x == top]
-  list(top, feat)
-}
+top_cor <- x_corr %>% 
+  select(where(is.numeric)) %>% 
+  vapply(max, double(1))
+                                    
+top_feat <- vapply(x_corr, function(x) feature[x == max(x)], character(1))
 
-
-tab <- lapply(x_corr, top_cor, feature)
-
-top_cor <- rep(NA, length(tab))
-feat <- rep(NA, length(tab))
-
-for(i in seq_along(tab)) {
-    top_cor[[i]] <- pluck(tab, i, 1)
-    feat[[i]] <- pluck(tab, i, 2)
-}
-
-tidy <- tibble(bacteria_target_species = names(tab),
+tidy <- tibble(bacteria_target_species = names(top_cor),
                top_correlation = top_cor,
-               feature_correlated_to = feat) %>% 
+               feature_correlated_to = top_feat[-11]) %>% 
   filter(bacteria_target_species != "feature") %>% 
   arrange(desc(top_correlation)) %>% 
   mutate(rank = row_number(),
@@ -290,7 +248,6 @@ tidy %>%
   tab_header(
     title = md("**Top couple of bacteria and feature correlation**"),
     )
-
 ```
 
 > Interestingly some feature has repetitive occurance , like :
@@ -331,18 +288,9 @@ p +
 }
 
 features <- names(bacteria_train)[- c(1, 288)]
-
-
-p <- vector("list", length(features))
-
 sample <- bacteria_train %>% sample_n(10000)
 
-for(i in seq_along(p)) {
-  
-  p[[i]] <- density_plot(sample, features[[i]])
-  
-}
-
+p <- lapply(features, density_plot, df = sample)
 
 plot_grid(plotlist = p[1:20], align = "h", ncol = 4)
 plot_grid(plotlist = p[21:40], align = "h", ncol = 4)
