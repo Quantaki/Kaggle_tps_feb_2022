@@ -23,11 +23,6 @@ p {
 }
 ```
 
-```{r, include = FALSE}
-remotes::install_github("jthomasmock/gtExtras")
-
-```
-
 ```{r, include=FALSE}
 Sys.setenv(LANG = "en")
 
