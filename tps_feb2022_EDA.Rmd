@@ -1,5 +1,5 @@
 ---
-title: 'TPS feb 2022 EDA'
+title: 'Augmented EDA : new findings'
 date: '`r Sys.Date()`'
 output:
   html_document:
@@ -75,16 +75,83 @@ bacteria_train %>%
 
 > Nice dataset, first look, first thinking : The names of features are informative, there is a lot that can be done!
 
-## lets check the missing values 
+## Missing values and duplicated rows
 
 ```{r, warning=FALSE, message=FALSE}
 bacteria_tt <- bind_rows(bacteria_train, bacteria_test, .id = "data")
 
 is.na(bacteria_tt[, -c("target", "id", "data")]) %>% sum()
 
+sum(duplicated(bacteria_tt))
 ```
 
-> NULL, no missing value for both dataset train and test
+> NULL, no missing values and no duplicated rows for both dataset train and test
+
+## What about unique values? 
+
+let's check the feature's characteristics.  
+
+```{r}
+unique <- vapply(bacteria_train, function(x) length(unique(x)), double(1))
+
+set.seed(123)
+uni_samp <- unique[sample(length(bacteria_train), 20)]
+
+ggplot(tibble(
+  feature = names(uni_samp),
+  n_uni = as.integer(uni_samp)
+  ), aes(feature, n_uni, fill = feature)) + 
+  geom_col() + 
+  geom_hline(yintercept = 200000, col = "red") + 
+  labs(y = "number of unique values",
+       title = "Number of unique values for 20 randomly selected features") +
+  scale_y_continuous(limits = c(0, 250000)) +
+  theme_minimal() + 
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 90))
+
+```
+
+> It seems like all features are far below the threshold of 200000 rows! Which is very **weird** for data supposed to be double, with 10^7 numbers after the comma. This will suggest that the numbers are integer at the origin. 
+
+## Data : Back to the origin
+
+This [paper](https://www.frontiersin.org/articles/10.3389/fmicb.2020.00257/full) provides how the original data were transformed, in short a bias is subtracted from the original spectrum of the DNA sequence, they gives a formula for it, we will use it to comeback to the original data. 
+
+```{r}
+dna_seq <- names(bacteria_train)[-c(1, 288)]
+
+# Create a bias calculation function based on formula of the paper cited above
+get_bias <- function(x) {
+  
+  atgc <- str_extract_all(x, "\\d+") %>% 
+  pluck(1) %>% 
+  as.integer()
+  
+  w <- atgc[[1]]
+  x <- atgc[[2]]
+  y <- atgc[[3]]
+  z <- atgc[[4]]
+  
+ factorial(10) / (factorial(w) * factorial(x) * factorial(y) * factorial(z) * 4 ^ 10)
+  
+}
+
+# compute bias
+bias_dna <- vapply(dna_seq, get_bias, double(1))
+
+# Back to original data 
+
+back_to_origin 
+
+
+(bacteria_train[, 2] + bias_dna[[2]]) * 1000000
+
+```
+
+
+
+
 
 ```{r, include=FALSE}
 remove(bacteria_tt)
