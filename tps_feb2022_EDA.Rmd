@@ -116,7 +116,7 @@ ggplot(tibble(
 
 ## Data : Back to the origin
 
-This [paper](https://www.frontiersin.org/articles/10.3389/fmicb.2020.00257/full) provides how the original data were transformed, in short a bias is subtracted from the original spectrum of the DNA sequence, they gives a formula for it, we will use it to comeback to the original data. 
+This [paper](https://www.frontiersin.org/articles/10.3389/fmicb.2020.00257/full) provides how the original data were transformed : in short a bias is subtracted from the original spectrum of the DNA sequence, they gives a formula for it, we will use it to comeback to the original data. 
 
 ```{r}
 dna_seq <- names(bacteria_train)[-c(1, 288)]
@@ -141,14 +141,12 @@ get_bias <- function(x) {
 bias_dna <- vapply(dna_seq, get_bias, double(1))
 
 # Back to original data 
-
 cols_train <- vector("list", length(dna_seq))
 cols_test <- vector("list", length(dna_seq))
-
 names(cols_train) <- dna_seq
 names(cols_test) <- dna_seq
 
-for(i in seq_along(cols)) {
+for(i in seq_along(dna_seq)) {
   s <- i + 1
   cols_train[[i]] <- (bacteria_train[, ..s] + bias_dna[[i]]) * 1000000
   cols_test[[i]] <- (bacteria_test[, ..s] + bias_dna[[i]]) * 1000000
@@ -164,12 +162,17 @@ bacteria_test <- cbind(
   row_id = bacteria_test$row_id, 
   as.data.table(cols_test)
 )
-
 ```
 
+## New overview 
 
+let's see how original data looks like. 
 
-
+```{r}
+bacteria_train %>% 
+  head(5) %>% 
+  gt()
+```
 
 ```{r, include=FALSE}
 remove(bacteria_tt)
@@ -178,7 +181,7 @@ gc()
 
 ## Summary statistics
 
-We propose a rapid overview of some statistics of a sample of 30 randomly selected features. 
+We can start now explore effectively our datasest. Let's start by some statistics. We propose a random selection of 30 features.
 
 ```{r, warning=FALSE, message=FALSE}
 skim <- bacteria_train %>% 
@@ -340,7 +343,7 @@ tidy %>%
 
 # Feature distribution 
 
-Lets now see how the feature are individual distributed.
+Let's see now how the feature are individual distributed ? After getting back to the original data it is easier now to scale the x axis by log transformation (due to large right skewness). 
 
 ```{r, warning=FALSE}
 
@@ -348,7 +351,7 @@ density_plot <- function(df, x){
 
 p <-   df %>% 
   ggplot(aes(.data[[x]])) +
-  geom_density(fill = "blue") + 
+  geom_density(fill = "blue") +
   scale_y_continuous(labels = function(x) sprintf("%.1f", x)) +
   labs(y = "density")
     
@@ -448,17 +451,14 @@ top_cor %>%
 Lets Visualize the top one correlation 
 
 ```{r}
-
 bacteria_train %>% 
   sample_frac(0.3) %>% 
   ggplot(aes(A1T2G6C1, A1T2G7C0)) + 
   geom_point(aes(col = target), size = 2) + 
-  geom_smooth(method = "lm", formula = "y~x", col = "red") + 
-  facet_zoom(x = A1T2G6C1 < 0.001, y = A1T2G7C0 < 0.0005) + 
+  geom_smooth(method = "lm", formula = "y~x", col = "red") +
+  facet_zoom(x = A1T2G6C1 < 4000, y = A1T2G7C0 < 600) + 
   labs(title = "Top one correlation between A1T2G6C1 ~ A1T2G7C0, highlighted by target ") + 
   theme(legend.position = "top") 
-
-
 ```
 
 > Wow ! becareful outliers before any conclusion! 
@@ -467,7 +467,5 @@ bacteria_train %>%
 
 > Interractions are very strong ! I highly suggest based tree models.
 
-**If you enjoy exploring this kernel please consider upvote**
-
-*Stay tunned work still in progress*
+*If you found this kernel helpful please consider upvote*
 
