@@ -134,7 +134,7 @@ get_bias <- function(x) {
   z <- atgc[[4]]
   
  factorial(10) / (factorial(w) * factorial(x) * factorial(y) * factorial(z) * 4 ^ 10)
-  
+
 }
 
 # compute bias
@@ -142,10 +142,28 @@ bias_dna <- vapply(dna_seq, get_bias, double(1))
 
 # Back to original data 
 
-back_to_origin 
+cols_train <- vector("list", length(dna_seq))
+cols_test <- vector("list", length(dna_seq))
 
+names(cols_train) <- dna_seq
+names(cols_test) <- dna_seq
 
-(bacteria_train[, 2] + bias_dna[[2]]) * 1000000
+for(i in seq_along(cols)) {
+  s <- i + 1
+  cols_train[[i]] <- (bacteria_train[, ..s] + bias_dna[[i]]) * 1000000
+  cols_test[[i]] <- (bacteria_test[, ..s] + bias_dna[[i]]) * 1000000
+}
+
+bacteria_train <- cbind(
+  row_id = bacteria_train$row_id, 
+  as.data.table(cols_train),
+  target = bacteria_train$target
+  )
+
+bacteria_test <- cbind(
+  row_id = bacteria_test$row_id, 
+  as.data.table(cols_test)
+)
 
 ```
 
